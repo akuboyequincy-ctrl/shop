@@ -1787,6 +1787,68 @@ let state = {
   modalQty: 1,
 };
 
+// ============================
+// WebSocket Connection (Real-time Sync)
+// ============================
+let ws = null;
+let wsConnected = false;
+
+function connectWebSocket() {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${window.location.host}`;
+  
+  ws = new WebSocket(wsUrl);
+  
+  ws.onopen = () => {
+    wsConnected = true;
+    console.log('✅ Connected to server');
+  };
+  
+  ws.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+    handleServerUpdate(message);
+  };
+  
+  ws.onclose = () => {
+    wsConnected = false;
+    console.log('❌ Disconnected from server. Retrying in 3s...');
+    setTimeout(connectWebSocket, 3000);
+  };
+  
+  ws.onerror = (error) => {
+    console.error('WebSocket error:', error);
+  };
+}
+
+function sendToServer(message) {
+  if (ws && wsConnected) {
+    ws.send(JSON.stringify(message));
+  }
+}
+
+function handleServerUpdate(message) {
+  const { type, data } = message;
+  
+  if (type === 'init') {
+    // Initial data from server
+    state.products = data.products || [];
+    state.orders = data.orders || [];
+    state.customers = data.customers || [];
+    state.suppliers = data.suppliers || [];
+    saveState();
+  } else if (type === 'order_update') {
+    // New order received
+    state.orders = data;
+    saveState();
+    renderAllOrders();
+  } else if (type === 'products_update') {
+    // Products updated
+    state.products = data;
+    saveState();
+    renderAdminProducts();
+  }
+}
+
 // Load from localStorage
 function loadState() {
   const saved = localStorage.getItem('shopzone_data');
@@ -1815,6 +1877,44 @@ function saveState() {
     customers: state.customers,
     suppliers: state.suppliers,
   }));
+}
+
+// ============================
+// REAL-TIME SYNC (Multi-device)
+// ============================
+let lastOrderCount = 0;
+let syncInterval = null;
+
+function startRealtimeSync() {
+  if (syncInterval) return; // Already running
+  
+  lastOrderCount = state.orders.length;
+  syncInterval = setInterval(() => {
+    const saved = localStorage.getItem('shopzone_data');
+    if (saved) {
+      const d = JSON.parse(saved);
+      const newOrderCount = (d.orders || []).length;
+      
+      // Check if new orders were added
+      if (newOrderCount > lastOrderCount) {
+        state.orders = d.orders || [];
+        state.products = d.products || [];
+        lastOrderCount = newOrderCount;
+        
+        // Refresh admin orders table if visible
+        if (document.getElementById('all-orders-table')) {
+          renderAllOrders();
+        }
+      }
+    }
+  }, 2000); // Check every 2 seconds
+}
+
+function stopRealtimeSync() {
+  if (syncInterval) {
+    clearInterval(syncInterval);
+    syncInterval = null;
+  }
 }
 
 // ============================
@@ -1860,6 +1960,7 @@ function adminLogin() {
     document.getElementById('screen-customer-login').style.display = 'none';
     showScreen('screen-admin');
     updateOverview();
+    startRealtimeSync();
     showToast('Welcome back, Nii! 👋', 'success');
   } else {
     err.textContent = '❌ Invalid credentials. Use admin / admin123';
@@ -1900,6 +2001,7 @@ function customerLogin() {
 function logout() {
   state.currentUser = null;
   state.currentRole = null;
+  stopRealtimeSync();
   document.getElementById('admin-username').value = '';
   document.getElementById('admin-password').value = '';
   document.getElementById('cust-login-name').value = '';
@@ -2236,6 +2338,12 @@ async function placeOrder() {
 
   saveState();
 
+  // Send order to server for real-time sync across devices
+  sendToServer({
+    type: 'order',
+    data: order
+  });
+
   // === SEND TO WHATSAPP ===
   const WHATSAPP_NUMBER = '0246570758'; // Your WhatsApp number
   const whatsappMessage = generateWhatsAppMessage(order, p, state.modalQty, address, notes || 'None', orderDate);
@@ -2415,6 +2523,7 @@ function createParticles() {
 // INIT
 // ============================
 loadState();
+connectWebSocket();
 createParticles();
 renderSuppliersDirectory();
 

@@ -1,0 +1,37 @@
+# Secrets & Credentials
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+secrets.json
+config.private.js
+
+# Logs & Temp Files
+*.log
+logs/
+tmp/
+temp/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Build Artifacts
+node_modules/
+dist/
+build/
+*.bak
+
+# API Keys & Tokens (never commit)
+.apikeys
+credentials.json
+bearer-token.txt
