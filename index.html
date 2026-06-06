@@ -313,10 +313,40 @@
      AUTH FORMS — SPLIT PANEL
   ============================ */
   .auth-screen {
-    display: flex;
+    display: none;
     min-height: 100vh;
   }
-  .auth-screen.active { display: flex; }
+  .auth-screen.active {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(10px);
+    padding: 20px;
+    z-index: 999;
+  }
+  .auth-screen.active .auth-panel-left {
+    display: none;
+  }
+  .auth-screen.active .auth-panel-right {
+    width: 100%;
+    min-width: auto;
+    max-width: 520px;
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .auth-screen.active .auth-box {
+    margin: 0 auto;
+    background: var(--card);
+    border-radius: 24px;
+    padding: 42px 36px;
+    max-width: 520px;
+    width: 100%;
+    box-shadow: 0 30px 90px rgba(0,0,0,0.35);
+  }
 
   /* LEFT decorative panel */
   .auth-panel-left {
@@ -801,7 +831,7 @@
     gap: 8px;
     margin-top: 14px;
     padding-top: 14px;
-    border-top: 1px solid var(--border);
+    border-top: none;
   }
   .btn-sm {
     flex: 1;
@@ -972,6 +1002,8 @@
   .store-product-img img {
     width: 100%; height: 100%; object-fit: cover;
     transition: transform 0.5s;
+    display: block;
+    line-height: 0;
   }
   .store-product-card:hover .store-product-img img { transform: scale(1.08); }
   .store-product-img-placeholder {
@@ -979,6 +1011,7 @@
     display: flex; align-items: center; justify-content: center;
     font-size: 80px;
     background: linear-gradient(135deg, var(--dark3), var(--card2));
+    position: relative;
   }
 
   .store-product-badge {
@@ -1307,7 +1340,7 @@
       the confidence of knowing it's real, and the joy of having it arrive at your door.
     </p>
     <div class="landing-cta-row">
-      <button class="landing-btn-primary" onclick="scrollToChooser()">Get Started →</button>
+      <button class="landing-btn-primary" onclick="showScreen('screen-customer-login')">Get Started →</button>
     </div>
   </div>
 
@@ -1364,14 +1397,22 @@
     </div>
   </div>
 
-  <!-- ROLE CHOOSER -->
-  <div class="role-chooser" 
-      </div>
-    </div>
+  <!-- ROLE CHOOSER (hidden) -->
+  <div class="role-chooser" style="display:none;"></div>
+
+  <!-- Admin button -->
+  <div style="position: fixed; top: 14px; right: 14px; z-index: 10000;">
+    <button
+      class="btn btn-outline"
+      style="width:auto; padding: 10px 16px; border-radius: 12px; color: var(--gold); border-color: rgba(245,200,66,0.35); background: rgba(255,255,255,0.03);"
+      onclick="showScreen('screen-admin-login')"
+    >
+      Admin
+    </button>
+  </div>
 
   <p class="landing-footer-note">🔒 Secure · Trusted · Always Here For You</p>
 </div>
-
 
 
 <!-- ============================
@@ -1390,9 +1431,14 @@
   <div class="store-hero">
     <h1>Discover Amazing Products</h1>
     <p>Shop the best collection, delivered straight to you</p>
+
+
   </div>
 
   <div class="store-main">
+    <div class="search-row" style="margin-bottom: 18px; max-width: 560px; margin-left:auto; margin-right:auto;">
+      <input id="store-search" type="text" placeholder="Search products..." oninput="searchProducts(this.value)" style="font-size:15px; padding: 12px 16px; background: rgba(28,28,46,0.85); border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; width: 100%; color: var(--text); outline: none; box-shadow: 0 10px 30px rgba(124,58,237,0.16);" />
+    </div>
     <div class="filter-bar" id="filter-bar">
       <button class="filter-chip active" onclick="filterProducts('all', this)">All</button>
     </div>
@@ -1466,10 +1512,11 @@
 
 
 
-  <!-- ============================
-     ADMIN LOGIN
+<!-- ============================
+     ADMIN LOGIN (hidden)
 ============================ -->
 <div id="screen-admin-login" class="screen auth-screen">
+
   <!-- LEFT PANEL -->
   <div class="auth-panel-left" id="admin-left-panel">
     <div class="auth-left-logo">ShopZone</div>
@@ -1718,6 +1765,7 @@
       🚀 Confirm Order
     </button>
   </div>
+</div>
 <!-- Toast -->
 <div class="toast" id="toast">
   <span class="toast-icon" id="toast-icon">✅</span>
@@ -2038,6 +2086,7 @@ function renderAllOrders() {
 // STORE
 // ============================
 let currentFilter = 'all';
+let currentSearchQuery = '';
 
 function renderStore() {
   const grid = document.getElementById('store-grid');
@@ -2050,9 +2099,14 @@ function renderStore() {
       onclick="filterProducts('${cat.toLowerCase() === 'all' ? 'all' : cat}', this)">${cat}</button>
   `).join('');
 
-  const filtered = currentFilter === 'all'
+  const baseFiltered = currentFilter === 'all'
     ? state.products
     : state.products.filter(p => p.category === currentFilter);
+
+  const filtered = currentSearchQuery
+    ? baseFiltered.filter(p => (p.name || '').toLowerCase().includes(currentSearchQuery))
+    : baseFiltered;
+
 
   if (!filtered.length) {
     grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><div class="empty-icon">🛍️</div><h3>No Products Available</h3><p>Check back soon!</p></div>`;
@@ -2089,10 +2143,22 @@ function filterProducts(cat, btn) {
   renderStore();
 }
 
+function searchProducts(query) {
+  const q = (query || '').trim().toLowerCase();
+  currentSearchQuery = q;
+  renderStore();
+}
+
 // ============================
 // BUY MODAL
 // ============================
 function openBuyModal(productId) {
+  if (state.currentRole !== 'customer') {
+    showToast('Please login as a customer before placing an order.', 'error');
+    showScreen('screen-customer-login');
+    return;
+  }
+
   const p = state.products.find(x => x.id === productId);
   if (!p) return;
   if (p.stock === 0) { showToast('❌ Sorry, this product is out of stock.', 'error'); return; }
@@ -2170,38 +2236,21 @@ async function placeOrder() {
 
   saveState();
 
-  // === SEND TO TELEGRAM ===
-  const TELEGRAM_BOT_TOKEN = '7584086775:AAGfJnIXiXNhXrUCkrMILFlKiuCjDiQKSaE'; // Public bot token placeholder
-  const PHONE_NUMBER = '0248612184';
-
-  const message =
-`🛒 *NEW ORDER — ShopZone*
-━━━━━━━━━━━━━━━━━━━━
-📦 *Product:* ${p.name}
-📁 *Category:* ${p.category}
-🔢 *Quantity:* ${state.modalQty}
-💵 *Unit Price:* GHS ${p.price.toLocaleString()}
-💰 *TOTAL:* GHS ${total.toLocaleString()}
-━━━━━━━━━━━━━━━━━━━━
-👤 *Customer:* ${state.currentUser}
-📞 *Phone:* ${getCustomerPhone()}
-📍 *Delivery Address:* ${address}
-📝 *Notes:* ${notes || 'None'}
-━━━━━━━━━━━━━━━━━━━━
-📅 *Date:* ${orderDate}
-🆔 *Order ID:* #${order.id}
-━━━━━━━━━━━━━━━━━━━━
-📲 Contact customer: wa.me/${getCustomerPhone().replace(/\s/g,'')}`;
-
-  // Try to send via Telegram using phone number as chat_id approach
-  // Note: For production, replace with your actual Bot Token and Chat ID
-  // The phone number 0248612184 needs to be linked to a Telegram account Chat ID
-  try {
-    // Attempt Telegram send - using the number as a contact reference
-    await sendTelegramMessage(TELEGRAM_BOT_TOKEN, PHONE_NUMBER, message);
-  } catch(e) {
-    console.log('Telegram send attempted:', e.message);
-  }
+  // === SEND TO WHATSAPP ===
+  const WHATSAPP_NUMBER = '0246570758'; // Your WhatsApp number
+  const whatsappMessage = generateWhatsAppMessage(order, p, state.modalQty, address, notes || 'None', orderDate);
+  
+  // Create WhatsApp link (will open WhatsApp or WhatsApp Web)
+  const whatsappLink = `https://wa.me/233246570758?text=${encodeURIComponent(whatsappMessage)}`;
+  
+  // Store the link for later use in confirmation
+  order.whatsappLink = whatsappLink;
+  
+  // Optional: Auto-open WhatsApp after a short delay
+  setTimeout(() => {
+    // Uncomment the line below to auto-open WhatsApp
+    // window.open(whatsappLink, '_blank');
+  }, 1500);
 
   closeModal();
   btn.innerHTML = '🚀 Confirm Order';
@@ -2213,27 +2262,8 @@ async function placeOrder() {
   showOrderConfirmation(order, p);
 }
 
-async function sendTelegramMessage(token, chatIdentifier, text) {
-  // Primary: Try to send to the phone number's associated Telegram
-  // For this to work in production:
-  // 1. Create a bot at t.me/BotFather
-  // 2. Start a chat with your bot from your Telegram (linked to 0248612184)
-  // 3. Get your chat_id from t.me/userinfobot
-  // 4. Replace CHAT_ID below with your actual chat ID
-
-  const CHAT_ID = chatIdentifier; // Replace with actual Telegram chat ID e.g. '1234567890'
-
-  const url = `https://api.telegram.org/bot${token}/sendMessage`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: CHAT_ID,
-      text: text,
-      parse_mode: 'Markdown',
-    }),
-  });
-  return res.json();
+function generateWhatsAppMessage(order, product, qty, address, notes, orderDate) {
+  return `🛒 *NEW ORDER — ShopZone*\n\n📦 *Product:* ${product.name}\n📁 *Category:* ${product.category}\n🔢 *Quantity:* ${qty}\n💵 *Unit Price:* GHS ${product.price.toLocaleString()}\n💰 *TOTAL:* GHS ${order.total.toLocaleString()}\n\n👤 *Customer:* ${order.customerName}\n📞 *Phone:* ${order.phone}\n📍 *Delivery Address:* ${address}\n📝 *Notes:* ${notes}\n\n📅 *Date:* ${orderDate}\n🆔 *Order ID:* #${order.id}`;
 }
 
 function getCustomerPhone() {
@@ -2324,6 +2354,9 @@ function showOrderConfirmation(order, product) {
     position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(12px);
     z-index: 300; display: flex; align-items: center; justify-content: center; padding: 20px;
   `;
+  
+  const whatsappLink = order.whatsappLink || `https://wa.me/233246570758?text=${encodeURIComponent('Hi, I have a question about my order')}`;
+  
   div.innerHTML = `
     <div style="background: var(--card); border: 1px solid rgba(34,197,94,0.3); border-radius: 24px; padding: 48px 40px; text-align: center; max-width: 420px; width:100%; animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
       <div style="font-size: 72px; margin-bottom: 16px;">🎉</div>
@@ -2335,11 +2368,16 @@ function showOrderConfirmation(order, product) {
         <div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span style="color:var(--muted); font-size:13px;">Quantity</span><span style="font-size:13px;">${order.qty}</span></div>
         <div style="display:flex; justify-content:space-between;"><span style="color:var(--muted); font-size:13px;">Total</span><span style="font-size:15px; font-weight:700; color:var(--gold);">GHS ${order.total.toLocaleString()}</span></div>
       </div>
-      <button onclick="this.closest('[style]').remove()" style="background: linear-gradient(135deg, var(--accent), var(--accent2)); color:#fff; border:none; padding:14px 40px; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer; font-family:'Satoshi',sans-serif; width:100%;">Continue Shopping</button>
+      <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+        <a href="${whatsappLink}" target="_blank" rel="noopener noreferrer" style="flex:1; background: #25D366; color:#fff; border:none; padding:12px 20px; border-radius:12px; font-size:14px; font-weight:700; cursor:pointer; font-family:'Satoshi',sans-serif; text-decoration:none; display:flex; align-items:center; justify-content:center; gap:8px;">
+          💬 WhatsApp Confirmation
+        </a>
+        <button onclick="this.closest('[style]').remove()" style="flex:1; background: linear-gradient(135deg, var(--accent), var(--accent2)); color:#fff; border:none; padding:12px 20px; border-radius:12px; font-size:14px; font-weight:700; cursor:pointer; font-family:'Satoshi',sans-serif;">Continue</button>
+      </div>
     </div>
   `;
   document.body.appendChild(div);
-  setTimeout(() => div.remove(), 8000);
+  setTimeout(() => div.remove(), 10000);
 }
 
 // ============================
