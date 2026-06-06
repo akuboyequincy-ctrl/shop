@@ -1232,12 +1232,64 @@
     font-size: 24px;
     color: var(--gold);
   }
+
+  /* ============================
+     WHATSAPP FLOAT BUTTON
+  ============================ */
+  .whatsapp-float {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 9999;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: #25D366; /* WhatsApp */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 14px 36px rgba(37, 211, 102, 0.35);
+    text-decoration: none;
+    border: 1px solid rgba(255,255,255,0.25);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .whatsapp-float:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 18px 46px rgba(37, 211, 102, 0.45);
+  }
+  .whatsapp-float:active {
+    transform: translateY(-1px) scale(0.98);
+  }
+  .whatsapp-float .whatsapp-icon {
+    font-size: 26px;
+    line-height: 1;
+    filter: drop-shadow(0 2px 10px rgba(0,0,0,0.25));
+  }
+  @media (max-width: 600px) {
+    .whatsapp-float {
+      right: 16px;
+      bottom: 16px;
+      width: 52px;
+      height: 52px;
+    }
+  }
 </style>
 </head>
 <body>
 
 <!-- Floating particles -->
 <div class="particles" id="particles"></div>
+
+<!-- WhatsApp floating button -->
+<a class="whatsapp-float" href="https://wa.me/233277471723" target="_blank" rel="noopener" aria-label="Chat on WhatsApp">
+  <span class="whatsapp-icon">💬</span>
+</a>
+
+<!-- WhatsApp floating button (second number) -->
+<a class="whatsapp-float" href="https://wa.me/233246570758" target="_blank" rel="noopener" aria-label="Chat on WhatsApp">
+  <span class="whatsapp-icon">💬</span>
+</a>
+
 
 <!-- ============================
      LANDING
@@ -1313,8 +1365,9 @@
   </div>
 
   <!-- ROLE CHOOSER -->
-  <div class="role-chooser" id="role-chooser">
-    
+  <div class="role-chooser" 
+      </div>
+    </div>
 
   <p class="landing-footer-note">🔒 Secure · Trusted · Always Here For You</p>
 </div>
@@ -1665,8 +1718,6 @@
       🚀 Confirm Order
     </button>
   </div>
-</div>
-
 <!-- Toast -->
 <div class="toast" id="toast">
   <span class="toast-icon" id="toast-icon">✅</span>
@@ -1683,6 +1734,7 @@ let state = {
   products: [],
   orders: [],
   customers: [],
+  suppliers: [],
   currentProduct: null,
   modalQty: 1,
 };
@@ -1695,6 +1747,7 @@ function loadState() {
     state.products = d.products || [];
     state.orders = d.orders || [];
     state.customers = d.customers || [];
+    state.suppliers = d.suppliers || [];
   } else {
     // Seed with demo products
     state.products = [
@@ -1712,6 +1765,7 @@ function saveState() {
     products: state.products,
     orders: state.orders,
     customers: state.customers,
+    suppliers: state.suppliers,
   }));
 }
 
@@ -2187,6 +2241,82 @@ function getCustomerPhone() {
   return cust ? cust.phone : 'N/A';
 }
 
+// ============================
+// SUPPLIERS
+// ============================
+function openSupplierSignup() {
+  document.getElementById('supplier-error').style.display = 'none';
+  document.getElementById('supplier-success').style.display = 'none';
+  document.getElementById('supplier-name').value = '';
+  document.getElementById('supplier-business').value = '';
+  document.getElementById('supplier-category').value = '';
+  document.getElementById('supplier-phone').value = '';
+  document.getElementById('supplier-email').value = '';
+  document.getElementById('supplier-about').value = '';
+  document.getElementById('supplier-modal').classList.add('active');
+}
+
+function closeSupplierModal() {
+  document.getElementById('supplier-modal').classList.remove('active');
+}
+
+function supplierSignup() {
+  const name = document.getElementById('supplier-name').value.trim();
+  const business = document.getElementById('supplier-business').value.trim();
+  const category = document.getElementById('supplier-category').value.trim();
+  const phone = document.getElementById('supplier-phone').value.trim();
+  const email = document.getElementById('supplier-email').value.trim();
+  const about = document.getElementById('supplier-about').value.trim();
+  const err = document.getElementById('supplier-error');
+  const succ = document.getElementById('supplier-success');
+
+  if (!name || !business || !category || !phone) {
+    err.textContent = '❌ Please fill in all required fields.';
+    err.style.display = 'block';
+    succ.style.display = 'none';
+    return;
+  }
+
+  err.style.display = 'none';
+
+  const id = Date.now();
+  const supplier = { id, name, business, category, phone, email, about, joinedAt: new Date().toISOString() };
+  state.suppliers.push(supplier);
+  saveState();
+
+  succ.textContent = '✅ Registration received! We will review and contact you.';
+  succ.style.display = 'block';
+  showToast('Thanks — supplier registration received.', 'success');
+  renderSuppliersDirectory();
+  setTimeout(() => closeSupplierModal(), 1400);
+}
+
+function showSuppliersDirectory() {
+  showScreen('screen-landing');
+  setTimeout(() => {
+    const el = document.getElementById('suppliers-directory');
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+  }, 200);
+}
+
+function renderSuppliersDirectory() {
+  const container = document.getElementById('suppliers-list');
+  if (!container) return;
+  if (!state.suppliers.length) {
+    container.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><div class="empty-icon">🏷️</div><h3>No Suppliers Yet</h3><p>Suppliers who register will appear here.</p></div>`;
+    return;
+  }
+
+  container.innerHTML = state.suppliers.map(s => `
+    <div class="story-block">
+      <div class="story-icon">🏪</div>
+      <h3>${s.business}</h3>
+      <p><strong>${s.name}</strong> · ${s.category}<br>${s.about ? s.about.substring(0,120) + '...' : ''}</p>
+      <p style="margin-top:10px; font-size:13px; color:var(--muted);">Contact: ${s.phone}${s.email ? ' · ' + s.email : ''}</p>
+    </div>
+  `).join('');
+}
+
 function showOrderConfirmation(order, product) {
   // Create a temporary overlay for confirmation
   const div = document.createElement('div');
@@ -2248,6 +2378,7 @@ function createParticles() {
 // ============================
 loadState();
 createParticles();
+renderSuppliersDirectory();
 
 // Close modal on overlay click
 document.getElementById('buy-modal').addEventListener('click', function(e) {
