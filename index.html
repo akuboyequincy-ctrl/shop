@@ -1820,10 +1820,27 @@ function connectWebSocket() {
   };
 }
 
-function sendToServer(message) {
+async function sendToServer(message) {
   if (ws && wsConnected) {
     ws.send(JSON.stringify(message));
+    return true;
   }
+
+  if (message.type === 'order') {
+    try {
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(message.data),
+      });
+      return response.ok;
+    } catch (error) {
+      console.error('Order fallback failed:', error);
+      return false;
+    }
+  }
+
+  return false;
 }
 
 function handleServerUpdate(message) {
@@ -1836,11 +1853,13 @@ function handleServerUpdate(message) {
     state.customers = data.customers || [];
     state.suppliers = data.suppliers || [];
     saveState();
+    updateOverview();
   } else if (type === 'order_update') {
     // New order received
     state.orders = data;
     saveState();
     renderAllOrders();
+    updateOverview();
   } else if (type === 'products_update') {
     // Products updated
     state.products = data;
@@ -2100,6 +2119,18 @@ function resetProductForm() {
   document.getElementById('product-form-success').style.display = 'none';
 }
 
+function escapeHtml(value) {
+  return String(value || '').replace(/[&<>"']/g, (char) => {
+    return {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[char];
+  });
+}
+
 function renderAdminProducts() {
   const grid = document.getElementById('admin-products-grid');
   if (!state.products.length) {
@@ -2108,11 +2139,11 @@ function renderAdminProducts() {
   }
   grid.innerHTML = state.products.map(p => `
     <div class="product-card">
-      ${p.image ? `<img src="${p.image}" style="width:100%;height:180px;object-fit:cover;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" /><div class="product-img-placeholder" style="display:none;">${p.emoji||'📦'}</div>` : `<div class="product-img-placeholder">${p.emoji||'📦'}</div>`}
+      ${p.image ? `<img src="${escapeHtml(p.image)}" style="width:100%;height:180px;object-fit:cover;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" /><div class="product-img-placeholder" style="display:none;">${escapeHtml(p.emoji || '📦')}</div>` : `<div class="product-img-placeholder">${escapeHtml(p.emoji || '📦')}</div>`}
       <div class="product-body">
-        <div class="product-category">${p.category}</div>
-        <div class="product-name">${p.name}</div>
-        <div class="product-desc">${p.desc.substring(0,80)}...</div>
+        <div class="product-category">${escapeHtml(p.category)}</div>
+        <div class="product-name">${escapeHtml(p.name)}</div>
+        <div class="product-desc">${escapeHtml(p.desc.substring(0,80))}...</div>
         <div class="product-price">GHS ${p.price.toLocaleString()}</div>
         <div style="font-size:12px; color:var(--muted); margin-top:4px;">Stock: ${p.stock} units</div>
         <div class="product-actions">
@@ -2151,8 +2182,8 @@ function renderRecentOrders() {
   table.innerHTML = header + recent.map((o, i) => `
     <div class="table-row">
       <span style="color:var(--muted); font-size:12px;">${state.orders.length - i}</span>
-      <span><strong>${o.customerName}</strong><br><span style="font-size:11px;color:var(--muted);">${o.phone}</span></span>
-      <span>${o.productName} × ${o.qty}</span>
+      <span><strong>${escapeHtml(o.customerName)}</strong><br><span style="font-size:11px;color:var(--muted);">${escapeHtml(o.phone)}</span></span>
+      <span>${escapeHtml(o.productName)} × ${o.qty}</span>
       <span style="color:var(--gold); font-weight:700;">GHS ${o.total.toLocaleString()}</span>
       <span style="font-size:12px;color:var(--muted);">${new Date(o.date).toLocaleDateString()}</span>
       <span><div class="status-badge status-new">New</div></span>
@@ -2175,8 +2206,8 @@ function renderAllOrders() {
   table.innerHTML = header + all.map((o, i) => `
     <div class="table-row">
       <span style="color:var(--muted); font-size:12px;">${state.orders.length - i}</span>
-      <span><strong>${o.customerName}</strong><br><span style="font-size:11px;color:var(--muted);">${o.phone}</span></span>
-      <span>${o.productName} × ${o.qty}</span>
+      <span><strong>${escapeHtml(o.customerName)}</strong><br><span style="font-size:11px;color:var(--muted);">${escapeHtml(o.phone)}</span></span>
+      <span>${escapeHtml(o.productName)} × ${o.qty}</span>
       <span style="color:var(--gold); font-weight:700;">GHS ${o.total.toLocaleString()}</span>
       <span style="font-size:12px;color:var(--muted);">${new Date(o.date).toLocaleDateString('en-GB')}</span>
       <span><div class="status-badge status-new">New</div></span>
@@ -2198,7 +2229,7 @@ function renderStore() {
   const categories = ['All', ...new Set(state.products.map(p => p.category))];
   filterBar.innerHTML = categories.map(cat => `
     <button class="filter-chip ${cat.toLowerCase() === currentFilter ? 'active' : ''}"
-      onclick="filterProducts('${cat.toLowerCase() === 'all' ? 'all' : cat}', this)">${cat}</button>
+      onclick="filterProducts(${JSON.stringify(cat.toLowerCase() === 'all' ? 'all' : cat)}, this)">${escapeHtml(cat)}</button>
   `).join('');
 
   const baseFiltered = currentFilter === 'all'
@@ -2218,12 +2249,12 @@ function renderStore() {
   grid.innerHTML = filtered.map(p => `
     <div class="store-product-card" onclick="openBuyModal(${p.id})">
       ${p.image
-        ? `<div class="store-product-img"><img src="${p.image}" alt="${p.name}" onerror="this.parentElement.outerHTML='<div class=store-product-img-placeholder>${p.emoji||'📦'}</div>'"><div class="store-product-badge">${p.category}</div></div>`
-        : `<div class="store-product-img-placeholder">${p.emoji||'📦'}<div class="store-product-badge" style="position:absolute;top:12px;left:12px;">${p.category}</div></div>`
+        ? `<div class="store-product-img"><img src="${escapeHtml(p.image)}" alt="${escapeHtml(p.name)}" onerror="this.style.display='none'; this.parentElement.querySelector('.store-product-img-placeholder').style.display='flex';" /><div class="store-product-img-placeholder" style="display:none;">${escapeHtml(p.emoji || '📦')}<div class="store-product-badge" style="position:absolute;top:12px;left:12px;">${escapeHtml(p.category)}</div></div></div>`
+        : `<div class="store-product-img-placeholder">${escapeHtml(p.emoji || '📦')}<div class="store-product-badge" style="position:absolute;top:12px;left:12px;">${escapeHtml(p.category)}</div></div>`
       }
       <div class="store-product-body">
-        <div class="store-product-name">${p.name}</div>
-        <div class="store-product-desc">${p.desc.substring(0, 90)}...</div>
+        <div class="store-product-name">${escapeHtml(p.name)}</div>
+        <div class="store-product-desc">${escapeHtml(p.desc.substring(0, 90))}...</div>
         <div class="store-product-footer">
           <div>
             <div class="store-product-price">GHS ${p.price.toLocaleString()}<span></span></div>
@@ -2339,10 +2370,14 @@ async function placeOrder() {
   saveState();
 
   // Send order to server for real-time sync across devices
-  sendToServer({
+  const synced = await sendToServer({
     type: 'order',
     data: order
   });
+
+  if (!synced) {
+    showToast('Order saved locally. Server sync pending.', 'error');
+  }
 
   // === SEND TO WHATSAPP ===
   const WHATSAPP_NUMBER = '0246570758'; // Your WhatsApp number
@@ -2448,9 +2483,9 @@ function renderSuppliersDirectory() {
   container.innerHTML = state.suppliers.map(s => `
     <div class="story-block">
       <div class="story-icon">🏪</div>
-      <h3>${s.business}</h3>
-      <p><strong>${s.name}</strong> · ${s.category}<br>${s.about ? s.about.substring(0,120) + '...' : ''}</p>
-      <p style="margin-top:10px; font-size:13px; color:var(--muted);">Contact: ${s.phone}${s.email ? ' · ' + s.email : ''}</p>
+      <h3>${escapeHtml(s.business)}</h3>
+      <p><strong>${escapeHtml(s.name)}</strong> · ${escapeHtml(s.category)}<br>${s.about ? escapeHtml(s.about.substring(0,120)) + '...' : ''}</p>
+      <p style="margin-top:10px; font-size:13px; color:var(--muted);">Contact: ${escapeHtml(s.phone)}${s.email ? ' · ' + escapeHtml(s.email) : ''}</p>
     </div>
   `).join('');
 }
@@ -2469,11 +2504,11 @@ function showOrderConfirmation(order, product) {
     <div style="background: var(--card); border: 1px solid rgba(34,197,94,0.3); border-radius: 24px; padding: 48px 40px; text-align: center; max-width: 420px; width:100%; animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
       <div style="font-size: 72px; margin-bottom: 16px;">🎉</div>
       <h2 style="font-family:'Clash Display',sans-serif; font-size:28px; font-weight:700; margin-bottom:8px;">Order Confirmed!</h2>
-      <p style="color: var(--muted); margin-bottom: 24px; line-height:1.6;">Your order for <strong style="color:var(--text);">${product.name}</strong> has been placed.<br>We'll contact you at <strong style="color:var(--gold);">${getCustomerPhone()}</strong> soon!</p>
+      <p style="color: var(--muted); margin-bottom: 24px; line-height:1.6;">Your order for <strong style="color:var(--text);">${escapeHtml(product.name)}</strong> has been placed.<br>We'll contact you at <strong style="color:var(--gold);">${escapeHtml(getCustomerPhone())}</strong> soon!</p>
       <div style="background: var(--dark3); border-radius: 12px; padding: 16px; margin-bottom: 24px; text-align:left;">
-        <div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span style="color:var(--muted); font-size:13px;">Order ID</span><span style="font-size:13px;">#${order.id}</span></div>
-        <div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span style="color:var(--muted); font-size:13px;">Product</span><span style="font-size:13px;">${product.emoji || '📦'} ${product.name}</span></div>
-        <div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span style="color:var(--muted); font-size:13px;">Quantity</span><span style="font-size:13px;">${order.qty}</span></div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span style="color:var(--muted); font-size:13px;">Order ID</span><span style="font-size:13px;">#${escapeHtml(order.id)}</span></div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span style="color:var(--muted); font-size:13px;">Product</span><span style="font-size:13px;">${escapeHtml(product.emoji || '📦')} ${escapeHtml(product.name)}</span></div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span style="color:var(--muted); font-size:13px;">Quantity</span><span style="font-size:13px;">${escapeHtml(order.qty)}</span></div>
         <div style="display:flex; justify-content:space-between;"><span style="color:var(--muted); font-size:13px;">Total</span><span style="font-size:15px; font-weight:700; color:var(--gold);">GHS ${order.total.toLocaleString()}</span></div>
       </div>
       <div style="display: flex; gap: 12px; margin-bottom: 16px;">

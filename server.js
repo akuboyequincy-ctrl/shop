@@ -10,8 +10,10 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 // Middleware
-app.use(cors());
-app.use(express.json());
+const allowedOrigin = process.env.CORS_ORIGIN || '';
+const corsOptions = allowedOrigin ? { origin: allowedOrigin } : {};
+app.use(cors(corsOptions));
+app.use(express.json({ limit: '50kb' }));
 app.use(express.static(path.join(__dirname)));
 
 // In-memory database (use real DB in production)
@@ -33,7 +35,14 @@ const clients = new Set();
 // ============================
 // WebSocket Handlers
 // ============================
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
+  const origin = req.headers.origin;
+  if (allowedOrigin && origin !== allowedOrigin) {
+    console.log('Rejected WebSocket connection from origin:', origin);
+    ws.close(1008, 'Origin not allowed');
+    return;
+  }
+
   clients.add(ws);
   console.log('Client connected. Total clients:', clients.size);
 
@@ -63,22 +72,25 @@ function handleMessage(message, sender) {
   const { type, data } = message;
 
   if (type === 'order') {
-    // New order placed
-    shopData.orders.push(data);
-    
-    // Update product stock
-    const pidx = shopData.products.findIndex(p => p.id === data.productId);
-    if (pidx !== -1) {
-      shopData.products[pidx].stock -= data.qty;
+    const order = normalizeOrder(data);
+
+    if (!findOrderById(order.id)) {
+      shopData.orders.push(order);
+
+      const pidx = shopData.products.findIndex(p => p.id === order.productId);
+      if (pidx !== -1) {
+        shopData.products[pidx].stock = Math.max(0, shopData.products[pidx].stock - order.qty);
+      }
+
+      broadcastToAll({
+        type: 'order_update',
+        data: shopData.orders,
+      });
+
+      console.log('Order placed:', order.id);
+    } else {
+      console.log('Duplicate order ignored:', order.id);
     }
-
-    // Broadcast to all clients
-    broadcastToAll({
-      type: 'order_update',
-      data: shopData.orders,
-    });
-
-    console.log('Order placed:', data.id);
   } else if (type === 'product_update') {
     // Product updated
     const pidx = shopData.products.findIndex(p => p.id === data.id);
@@ -103,6 +115,28 @@ function broadcastToAll(message) {
   });
 }
 
+function findOrderById(id) {
+  return shopData.orders.find((order) => order.id === id);
+}
+
+function normalizeOrder(order) {
+  return {
+    id: order.id || `ORD-${Date.now()}`,
+    productId: Number(order.productId) || null,
+    productName: order.productName || '',
+    category: order.category || '',
+    qty: Number(order.qty) || 1,
+    unitPrice: Number(order.unitPrice) || 0,
+    total: Number(order.total) || 0,
+    customerName: order.customerName || '',
+    phone: order.phone || '',
+    address: order.address || '',
+    notes: order.notes || '',
+    date: order.date || new Date().toISOString(),
+    status: order.status || 'new',
+  };
+}
+
 // ============================
 // REST API Endpoints
 // ============================
@@ -124,20 +158,23 @@ app.get('/api/products', (req, res) => {
 
 // Place order (fallback for non-WebSocket clients)
 app.post('/api/orders', (req, res) => {
-  const order = req.body;
-  shopData.orders.push(order);
+  const order = normalizeOrder(req.body);
 
-  // Update stock
-  const pidx = shopData.products.findIndex(p => p.id === order.productId);
-  if (pidx !== -1) {
-    shopData.products[pidx].stock -= order.qty;
+  if (!findOrderById(order.id)) {
+    shopData.orders.push(order);
+
+    const pidx = shopData.products.findIndex(p => p.id === order.productId);
+    if (pidx !== -1) {
+      shopData.products[pidx].stock = Math.max(0, shopData.products[pidx].stock - order.qty);
+    }
+
+    broadcastToAll({
+      type: 'order_update',
+      data: shopData.orders,
+    });
+  } else {
+    console.log('Duplicate order ignored via fallback route:', order.id);
   }
-
-  // Broadcast to all WebSocket clients
-  broadcastToAll({
-    type: 'order_update',
-    data: shopData.orders,
-  });
 
   res.json({ success: true, order });
 });
